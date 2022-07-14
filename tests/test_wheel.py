@@ -39,6 +39,12 @@ if platform.system() == 'Linux':
 elif platform.system() == 'Darwin':
     SHARED_LIB_EXT = 'dylib'
 elif platform.system() == 'Windows':
+    # I'm using import library (link-time) rather than dynamic library (run-time)
+    # because that's what was already here for Cygwin
+    SHARED_LIB_EXT = 'lib'
+elif platform.system().startswith("CYGWIN"):
+    # I'm using import library (link-time) rather than dynamic library (run-time)
+    # because that's what was already here for Cygwin
     SHARED_LIB_EXT = 'dll.a'
 else:
     raise NotImplementedError(f'Unknown system: {platform.system()}')
