@@ -396,6 +396,62 @@ class _WheelBuilder():
         return wheel_file
 
 
+class _EditableWheelBuilder(_WheelBuilder):
+    """Helper class to build editable wheels from projects."""
+
+    def _find_root_modules(
+        self,
+        wheel_files: Mapping[str, Collection[Tuple[pathlib.Path, str]]],
+    ) -> Mapping[str, Collection[str]]:
+        """Find the root modules and the source directories that need to be injected."""
+        root_modules: DefaultDict[str, Set[str]] = collections.defaultdict(set)
+
+        for destination, origin in itertools.chain(
+            wheel_files['purelib'],
+            wheel_files['platlib'],
+        ):
+            subpath_part_count = len(pathlib.Path(destination).parts)
+            origin_root_parts = pathlib.Path(origin).parts[:-subpath_part_count]
+            root_modules[destination.parts[0]].add(
+                str(pathlib.Path(*origin_root_parts))
+            )
+
+        return root_modules
+
+    def build(
+        self,
+        sources: Dict[str, Dict[str, Any]],
+        copy_files: Dict[str, str],
+        directory: Path,
+    ) -> pathlib.Path:
+        import wheel.wheelfile
+
+        self._project.build()  # ensure project is built
+
+        wheel_file = pathlib.Path(directory, f'{self.name}.whl')
+        wheel_files = self._map_to_wheel(sources, copy_files)
+        root_modules = self._find_root_modules(wheel_files)
+
+        with wheel.wheelfile.WheelFile(wheel_file, 'w') as whl:
+            # add metadata
+            whl.writestr(f'{self.distinfo_dir}/METADATA', self._project.metadata)
+            whl.writestr(f'{self.distinfo_dir}/WHEEL', self.wheel)
+
+            # install .pth file hooks for the root modules pointing to their location
+            for module, paths in root_modules.items():
+                whl.writestr(f'{module}.pth', os.linesep.join(paths).encode())
+
+            # install all schemes other than source schemes
+            for scheme in self._SCHEME_MAP:
+                if scheme in ('purelib', 'platlib'):
+                    continue
+                for destination, origin in wheel_files[scheme]:
+                    destination = pathlib.Path(self.data_dir, scheme, destination)
+                    whl.write(origin, destination.as_posix())
+
+        return wheel_file
+
+
 class Project():
     """Meson project wrapper to generate Python artifacts."""
 
@@ -878,6 +934,14 @@ class Project():
         shutil.move(os.fspath(wheel), final_wheel)
         return final_wheel
 
+    def editable_wheel(self, directory: Path) -> pathlib.Path:  # noqa: F811
+        """Generates a wheel (binary distribution) in the specified directory."""
+        wheel = _EditableWheelBuilder(self).build(self._install_plan, self._copy_files, self._build_dir)
+
+        final_wheel = pathlib.Path(directory, wheel.name)
+        shutil.move(os.fspath(wheel), final_wheel)
+        return final_wheel
+
 
 @contextlib.contextmanager
 def _project(config_settings: Optional[Dict[Any, Any]]) -> Iterator[Project]:
@@ -925,3 +989,27 @@ def build_wheel(
     out = pathlib.Path(wheel_directory)
     with _project(config_settings) as project:
         return project.wheel(out).name
+
+
+def get_requires_for_build_editable(
+    config_settings: Optional[Dict[str, str]] = None,
+) -> List[str]:
+    return get_requires_for_build_wheel(config_settings)
+
+
+def build_editable(
+    wheel_directory: str,
+    config_settings: Optional[Dict[Any, Any]] = None,
+    metadata_directory: Optional[str] = None,
+) -> str:
+    _setup_cli()
+
+    if config_settings is None:
+        config_settings = {}
+
+    out = pathlib.Path(wheel_directory)
+
+    with Project.with_temp_working_dir(
+        build_dir=config_settings.get('builddir', '.mesonpy-editable'),
+    ) as project:
+        return project.editable_wheel(out).name
