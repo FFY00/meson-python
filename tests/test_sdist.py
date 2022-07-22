@@ -25,14 +25,15 @@ def test_contents(sdist_library):
 def test_contents_subdirs(sdist_subdirs):
     sdist = tarfile.open(sdist_subdirs, 'r:gz')
 
-    assert set(sdist.getnames()) == {
-        'subdirs-1.0.0/PKG-INFO',
-        'subdirs-1.0.0/meson.build',
-        'subdirs-1.0.0/pyproject.toml',
-        'subdirs-1.0.0/subdirs/__init__.py',
-        'subdirs-1.0.0/subdirs/a/__init__.py',
-        'subdirs-1.0.0/subdirs/a/b/c.py',
-        'subdirs-1.0.0/subdirs/b/c.py',
+    assert set((tar.name, tar.mode) for tar in sdist.getmembers()) == {
+        ('subdirs-1.0.0/PKG-INFO', 420),
+        ('subdirs-1.0.0/meson.build', 644),
+        ('subdirs-1.0.0/pyproject.toml', 644),
+        ('subdirs-1.0.0/subdirs/__init__.py', 644),
+        ('subdirs-1.0.0/subdirs/a/__init__.py', 644),
+        ('subdirs-1.0.0/subdirs/a/has_execbit.py', 755),
+        ('subdirs-1.0.0/subdirs/a/b/c.py', 644),
+        ('subdirs-1.0.0/subdirs/b/c.py', 644),
     }
 
 

@@ -9,6 +9,7 @@ py = py_mod.find_installation()
 py.install_sources([
     'subdirs' / '__init__.py',
     'subdirs' / 'a' / '__init__.py',
+    'subdirs' / 'a' / 'has_execbit.py',
     'subdirs' / 'a' / 'b' / 'c.py',
     'subdirs' / 'b' / 'c.py',
 ])
